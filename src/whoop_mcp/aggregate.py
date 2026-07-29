@@ -64,6 +64,11 @@ def daily(recoveries: list[dict], sleeps: list[dict], cycles: list[dict]) -> lis
         entry.update(
             {
                 "asleep_hours": record.get("asleep_hours"),
+                "sleep_window": (
+                    f"{record['bed_time']}–{record['wake_time']}"
+                    if record.get("bed_time") and record.get("wake_time")
+                    else None
+                ),
                 "sleep_performance_percent": record.get("performance_percent"),
                 "sleep_consistency_percent": record.get("consistency_percent"),
                 "sleep_efficiency_percent": record.get("efficiency_percent"),

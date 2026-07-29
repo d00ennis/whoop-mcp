@@ -41,3 +41,24 @@ def test_trend_compares_recent_against_baseline():
     assert result["recent_average"] == 60.0
     assert result["delta"] > 0
     assert result["sample_size"] == 28
+
+
+def test_evening_cycle_and_its_sleep_land_on_the_same_day():
+    # Nacht vom 27. auf den 28. Juli, Ortszeit Berlin
+    cycle = dict(CYCLE, id=555, start="2026-07-27T21:32:51.930Z", timezone_offset="+02:00")
+    night = dict(
+        SLEEP,
+        id="night-1",
+        cycle_id=555,
+        start="2026-07-27T21:32:51.930Z",
+        end="2026-07-28T05:59:51.390Z",
+        timezone_offset="+02:00",
+    )
+    recovery = dict(RECOVERY, cycle_id=555)
+    rows = aggregate.daily(
+        [normalize.recovery(recovery)], [normalize.sleep(night)], [normalize.cycle(cycle)]
+    )
+    assert len(rows) == 1
+    assert rows[0]["date"] == "2026-07-28"
+    assert rows[0]["recovery_score"] == 44
+    assert rows[0]["sleep_window"] == "23:32–07:59"

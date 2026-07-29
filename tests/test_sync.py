@@ -63,3 +63,29 @@ def test_sync_is_idempotent(tmp_path):
     sync.run(client=FakeClient(), store=store, days=7, write_export=False)
     sync.run(client=FakeClient(), store=store, days=7, write_export=False)
     assert store.counts() == {"recovery": 1, "sleep": 1, "cycles": 1, "workouts": 1}
+
+
+def test_sync_can_update_the_dashboard(tmp_path, monkeypatch):
+    from whoop_mcp import lifeos
+
+    dashboard = tmp_path / "index.html"
+    dashboard.write_text(
+        'const ATH = { updated:"01.01.2026",\n'
+        '  today:{ recovery:1, sleepPct:1, sleepH:1.0, sleepWin:"0:00-0:00", strain:1.0, plan:"x" },\n'
+        "  recovery:[[\"01.01.\",1]] };"
+    )
+    monkeypatch.setenv("WHOOP_MCP_DASHBOARD", str(dashboard))
+    monkeypatch.setenv("WHOOP_MCP_EXPORT_PATH", str(tmp_path / "whoop.json"))
+
+    store = Store(tmp_path / "t.db")
+    result = sync.run(client=FakeClient(), store=store, days=7, update_lifeos=True)
+    assert result["lifeos"]["written"] is True
+    assert "recovery:44" in dashboard.read_text()
+
+
+def test_missing_dashboard_does_not_break_sync(tmp_path, monkeypatch):
+    monkeypatch.setenv("WHOOP_MCP_DASHBOARD", str(tmp_path / "gibtsnicht.html"))
+    store = Store(tmp_path / "t.db")
+    result = sync.run(client=FakeClient(), store=store, days=7, update_lifeos=True)
+    assert "error" in result["lifeos"]
+    assert result["written"]["recovery"] == 1

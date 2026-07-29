@@ -39,7 +39,19 @@ def cmd_auth(args) -> int:
 def cmd_sync(args) -> int:
     from .sync import run
 
-    result = run(days=args.days)
+    result = run(days=args.days, update_lifeos=args.lifeos)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
+def cmd_lifeos(args) -> int:
+    from .lifeos import run
+
+    try:
+        result = run(dashboard=args.dashboard, dry_run=args.dry_run)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Life-OS-Aktualisierung fehlgeschlagen: {exc}", file=sys.stderr)
+        return 1
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0
 
@@ -101,7 +113,15 @@ def main() -> int:
 
     p_sync = sub.add_parser("sync", help="Daten abrufen und lokal speichern")
     p_sync.add_argument("--days", type=int, default=None)
+    p_sync.add_argument(
+        "--lifeos", action="store_true", help="danach das Life-OS-Dashboard aktualisieren"
+    )
     p_sync.set_defaults(func=cmd_sync)
+
+    p_lifeos = sub.add_parser("lifeos", help="Whoop-Werte ins Life-OS-Dashboard schreiben")
+    p_lifeos.add_argument("--dashboard", default=None)
+    p_lifeos.add_argument("--dry-run", action="store_true")
+    p_lifeos.set_defaults(func=cmd_lifeos)
 
     sub.add_parser("status", help="Konfiguration und Datenbestand anzeigen").set_defaults(
         func=cmd_status

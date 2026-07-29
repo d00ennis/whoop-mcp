@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from . import aggregate, normalize
+from . import aggregate, lifeos, normalize
 from .client import WhoopClient
 from .config import export_path
 from .store import Store
@@ -35,6 +35,7 @@ def run(
     store: Store | None = None,
     days: int | None = None,
     write_export: bool = True,
+    update_lifeos: bool = False,
 ) -> dict:
     client = client or WhoopClient()
     store = store or Store()
@@ -58,6 +59,12 @@ def run(
     result = {"days": days, "written": written, "totals": store.counts()}
     if write_export:
         result["export"] = str(build_export(store))
+    if update_lifeos:
+        # Ein fehlendes Dashboard darf den Sync nicht scheitern lassen.
+        try:
+            result["lifeos"] = lifeos.run()
+        except (FileNotFoundError, ValueError) as exc:
+            result["lifeos"] = {"error": str(exc)}
     return result
 
 

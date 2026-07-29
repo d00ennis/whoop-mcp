@@ -7,7 +7,59 @@ der Datenbank erhalten.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 KJ_PER_KCAL = 4.184
+
+# WHOOP-Zyklen beginnen am Abend: wer um 23:25 ins Bett geht, startet damit den
+# Zyklus des naechsten Tages. Startzeiten ab dieser Stunde zaehlen zum Folgetag.
+EVENING_HOUR = 18
+
+
+def _parse(timestamp) -> datetime | None:
+    if not isinstance(timestamp, str):
+        return None
+    try:
+        return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _offset(value) -> timedelta:
+    """WHOOP liefert den Offset als "+02:00"; ohne Angabe bleibt es bei UTC."""
+    if not isinstance(value, str) or len(value) < 6:
+        return timedelta(0)
+    sign = -1 if value[0] == "-" else 1
+    try:
+        hours, minutes = int(value[1:3]), int(value[4:6])
+    except ValueError:
+        return timedelta(0)
+    return sign * timedelta(hours=hours, minutes=minutes)
+
+
+def local_dt(timestamp, offset) -> datetime | None:
+    parsed = _parse(timestamp)
+    return parsed + _offset(offset) if parsed else None
+
+
+def local_date(timestamp, offset) -> str | None:
+    moment = local_dt(timestamp, offset)
+    return moment.date().isoformat() if moment else None
+
+
+def local_time(timestamp, offset) -> str | None:
+    moment = local_dt(timestamp, offset)
+    return moment.strftime("%H:%M") if moment else None
+
+
+def cycle_day(start, offset) -> str | None:
+    """Der Tag, dem ein Zyklus zugerechnet wird: der Aufwachtag."""
+    moment = local_dt(start, offset)
+    if moment is None:
+        return None
+    if moment.hour >= EVENING_HOUR:
+        moment = moment + timedelta(days=1)
+    return moment.date().isoformat()
 
 
 def _round(value, digits: int = 2):
@@ -60,8 +112,10 @@ def sleep(record: dict) -> dict:
     asleep = None
     if isinstance(in_bed, (int, float)) and isinstance(awake, (int, float)):
         asleep = in_bed - awake
+    offset = record.get("timezone_offset")
     return {
-        "date": day_of(record, "start", "created_at"),
+        # Der Schlaf wird dem Morgen zugeordnet, an dem er endet.
+        "date": local_date(record.get("end"), offset) or day_of(record, "end", "start"),
         "sleep_id": record.get("id"),
         "cycle_id": record.get("cycle_id"),
         "nap": record.get("nap"),
@@ -80,13 +134,18 @@ def sleep(record: dict) -> dict:
         "consistency_percent": _round(score.get("sleep_consistency_percentage"), 1),
         "efficiency_percent": _round(score.get("sleep_efficiency_percentage"), 1),
         "respiratory_rate": _round(score.get("respiratory_rate"), 1),
+        "bed_time": local_time(record.get("start"), offset),
+        "wake_time": local_time(record.get("end"), offset),
+        "start": record.get("start"),
+        "end": record.get("end"),
     }
 
 
 def cycle(record: dict) -> dict:
     score = record.get("score") or {}
     return {
-        "date": day_of(record, "start", "created_at"),
+        "date": cycle_day(record.get("start"), record.get("timezone_offset"))
+        or day_of(record, "start", "created_at"),
         "cycle_id": record.get("id"),
         "scored": record.get("score_state") == "SCORED",
         "strain": _round(score.get("strain"), 1),
@@ -114,7 +173,8 @@ def workout(record: dict) -> dict:
     score = record.get("score") or {}
     distance = score.get("distance_meter")
     result = {
-        "date": day_of(record, "start", "created_at"),
+        "date": local_date(record.get("start"), record.get("timezone_offset"))
+        or day_of(record, "start", "created_at"),
         "workout_id": record.get("id"),
         "sport": record.get("sport_name"),
         "scored": record.get("score_state") == "SCORED",

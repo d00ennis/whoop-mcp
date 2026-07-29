@@ -10,7 +10,7 @@ try:  # MCP SDK >= 2.0
 except ImportError:  # MCP SDK 1.x
     from mcp.server.fastmcp import FastMCP as _Server
 
-from . import aggregate, normalize, sync as sync_module
+from . import aggregate, lifeos as lifeos_module, normalize, sync as sync_module
 from .client import WhoopClient
 from .store import Store
 
@@ -141,6 +141,20 @@ def whoop_sync(days: int | None = None) -> dict[str, Any]:
     return sync_module.run(
         client=get_client(), store=get_store(), days=_clamp(days) if days else None
     )
+
+
+@mcp.tool()
+def whoop_lifeos_update(dry_run: bool = False) -> dict[str, Any]:
+    """Recovery, Schlaf und Strain ins Life-OS-Dashboard schreiben.
+
+    Aktualisiert nur die Whoop-Felder; Strava-Aktivitaeten, Gewicht und
+    Ernaehrung bleiben unberuehrt. Vor dem Schreiben wird eine Sicherung
+    angelegt. Mit ``dry_run`` werden die Aenderungen nur angezeigt.
+    """
+    try:
+        return lifeos_module.run(dry_run=dry_run)
+    except (FileNotFoundError, ValueError) as exc:
+        return {"error": str(exc)}
 
 
 def main() -> None:
